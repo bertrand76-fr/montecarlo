@@ -1,16 +1,9 @@
-# Monte Carlo Platform - Resource Group Creation
-# ÉTAPE 1 - Minimal: Resource Group uniquement
+# Monte Carlo Platform 
 
-# Resource Group principal
-resource "azurerm_resource_group" "main" {
-  name     = var.resource_group_name
-  location = var.location
-
-  tags = {
-    Environment = var.environment
-    Project     = "Monte Carlo Platform"
-    CreatedBy   = "Terraform"
-    Purpose     = "Distributed Computing Demo"
-  }
+module "resource_group" {
+  source              = "./modules/resource_group"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  environment         = var.environment
 }
 
