@@ -216,6 +216,7 @@ stages:
             provider: 'azurerm'
             command: 'init'
             workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
+            commandOptions: '-reconfigure'
             backendServiceArm: 'montecarlo-service-connection'
             backendAzureRmResourceGroupName: 'rg-terraform-state'
             backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
