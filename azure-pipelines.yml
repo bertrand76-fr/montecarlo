@@ -203,6 +203,15 @@ stages:
           artifact: terraform-plan
           displayName: 'Download Terraform Plan'
 
+        - task: Bash@3
+          displayName: 'Fix Provider Permissions'
+          inputs:
+            targetType: 'inline'
+            script: |
+              echo "Fixing terraform provider permissions..."
+              find $(Pipeline.Workspace)/terraform-plan/.terraform -name "*terraform-provider*" -type f -exec chmod +x {} \; 2>/dev/null || true
+              ls -la $(Pipeline.Workspace)/terraform-plan/.terraform/providers/registry.terraform.io/hashicorp/azurerm/*/linux_amd64/ || echo "No providers found yet"
+            workingDirectory: $(Pipeline.Workspace)
 
         - task: TerraformInstaller@0
           displayName: 'Install Terraform $(terraformVersion)'
