@@ -94,7 +94,6 @@ stages:
   # STAGE 2: INFRASTRUCTURE DEPLOYMENT
   - stage: Infrastructure_Deploy
     displayName: 'Infrastructure Deployment'
-    condition: succeeded()
     
     jobs:
       # Job 1: Terraform Plan et validation
@@ -115,8 +114,7 @@ stages:
           inputs:
             provider: 'azurerm'
             command: 'init'
-            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
-            commandOptions: '-reconfigure'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
             backendServiceArm: 'montecarlo-service-connection'
             backendAzureRmResourceGroupName: 'rg-terraform-state'
             backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
