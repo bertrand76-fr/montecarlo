@@ -52,7 +52,6 @@ stages:
           displayName: 'Use Python $(pythonVersion)'
           inputs:
             versionSpec: '$(pythonVersion)'
-            displayName: 'Python $(pythonVersion)'
         
         - script: |
             cd src/producer
@@ -241,22 +240,26 @@ stages:
           name: 'terraformOutputs'
             
             # Parse outputs et set variables
-            - task: PowerShell@2
-              displayName: 'Parse Terraform Outputs'
-              inputs:
-                targetType: 'inline'
-                script: |
-                  $outputs = terraform output -json | ConvertFrom-Json
-                  $functionName = $outputs.producer_function_name.value
-                  $functionUrl = $outputs.producer_function_url.value
+        - task: PowerShell@2
+          displayName: 'Parse Terraform Outputs'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $outputs = terraform output -json | ConvertFrom-Json
+              $resourceGroupName = $outputs.resource_group_name.value
+              Write-Host "Resource Group created: $resourceGroupName"
+
+            #  $outputs = terraform output -json | ConvertFrom-Json
+            #  $functionName = $outputs.producer_function_name.value
+            #  $functionUrl = $outputs.producer_function_url.value
                   
-                  Write-Host "Function Name: $functionName"
-                  Write-Host "Function URL: $functionUrl"
+            #  Write-Host "Function Name: $functionName"
+            #  Write-Host "Function URL: $functionUrl"
                   
-                  Write-Host "##vso[task.setvariable variable=functionName;isOutput=true]$functionName"
-                  Write-Host "##vso[task.setvariable variable=functionUrl;isOutput=true]$functionUrl"
-                workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
-              name: 'setOutputs'
+            #  Write-Host "##vso[task.setvariable variable=functionName;isOutput=true]$functionName"
+            #  Write-Host "##vso[task.setvariable variable=functionUrl;isOutput=true]$functionUrl"
+            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
+          name: 'setOutputs'
 
 
   # STAGE 3: APPLICATION DEPLOYMENT
