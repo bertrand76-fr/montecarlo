@@ -119,7 +119,7 @@ stages:
             workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
             backendServiceArm: 'montecarlo-service-connection'
             backendAzureRmResourceGroupName: 'rg-terraform-state'
-            backendAzureRmStorageAccountName: 'sttfstatedev'
+            backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
             backendAzureRmContainerName: 'tfstate'
             backendAzureRmKey: 'montecarlo.terraform.tfstate'
         
@@ -218,7 +218,7 @@ stages:
             workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
             backendServiceArm: 'montecarlo-service-connection'
             backendAzureRmResourceGroupName: 'rg-terraform-state'
-            backendAzureRmStorageAccountName: 'sttfstatedev'
+            backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
             backendAzureRmContainerName: 'tfstate'
             backendAzureRmKey: 'montecarlo.terraform.tfstate'
         
