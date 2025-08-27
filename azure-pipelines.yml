@@ -94,7 +94,6 @@ stages:
   # STAGE 2: INFRASTRUCTURE DEPLOYMENT
   - stage: Infrastructure_Deploy
     displayName: 'Infrastructure Deployment'
-    dependsOn: CI_Build
     condition: succeeded()
     
     jobs:
@@ -116,7 +115,8 @@ stages:
           inputs:
             provider: 'azurerm'
             command: 'init'
-            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
+            commandOptions: '-reconfigure'
             backendServiceArm: 'montecarlo-service-connection'
             backendAzureRmResourceGroupName: 'rg-terraform-state'
             backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
@@ -204,7 +204,8 @@ stages:
         - download: current
           artifact: terraform-plan
           displayName: 'Download Terraform Plan'
-        
+
+
         - task: TerraformInstaller@0
           displayName: 'Install Terraform $(terraformVersion)'
           inputs:
@@ -268,7 +269,9 @@ stages:
   # STAGE 3: APPLICATION DEPLOYMENT
   - stage: Application_Deploy
     displayName: 'Application Deployment'
-    dependsOn: Infrastructure_Deploy
+    dependsOn: 
+      - Infrastructure_Deploy
+      - CI_Build
     condition: succeeded()
     
     variables:
