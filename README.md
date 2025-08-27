@@ -41,13 +41,15 @@ Producer (Azure Function) → Service Bus Queue → Auto-scaling Consumers → T
 git clone https://github.com/YOUR_USERNAME/montecarlo.git
 cd montecarlo
 
-# 2. Configuration Resource Group
-export RG_MONTECARLO="rg-montecarlo-demo"
+# 2. Configuration Azure DevOps
+# - Variable Group "montecarlo-variables" avec RG_MONTECARLO
+# - Service Connection vers Azure subscription
+# - Environment "dev" configuré
 
 # 3. Déploiement via Azure Pipelines
 # Push vers main → trigger automatique pipeline
 git add .
-git commit -m "Initial setup"
+git commit -m "Initial setup" 
 git push origin main
 ```
 
