@@ -31,11 +31,11 @@ output "deployment_timestamp" {
 
 # Summary Output for Pipeline
 output "deployment_summary" {
-  description = "Summary of deployed resources"
+  description = "Résumé du déploiement"
   value = {
-    resource_group = azurerm_resource_group.main.name
-    location       = azurerm_resource_group.main.location
-    environment    = var.environment
-    tags           = azurerm_resource_group.main.tags
+    resource_group = module.resource_group.name
+    location       = module.resource_group.location
+    tags           = module.resource_group.tags
+    id             = module.resource_group.id
   }
 }
