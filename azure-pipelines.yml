@@ -22,7 +22,9 @@ pr:
 # trigger: none  # Décommentez pour désactiver auto-trigger complètement
 
 variables:
-  - group: montecarlo-variables  # Variable group avec RG_MONTECARLO
+  # - group: montecarlo-variables  # Variable group avec RG_MONTECARLO
+  - name: RG_MONTECARLO
+    value: 'montecarlo'    # Hardcodé pour test
   - name: terraformVersion
     value: '1.6.0'
   - name: pythonVersion
