@@ -47,9 +47,9 @@ output "deployment_summary" {
 
 
 output "producer_name" {
-  value = module.producer.name
+  value = module.producer.producer_name
 }
 
 output "producer_default_hostname" {
-  value = module.producer.default_hostname
+  value = module.producer.producer_default_hostname
 }
