@@ -44,3 +44,12 @@ output "deployment_summary" {
     id             = module.resource_group.id
   }
 }
+
+
+output "producer_name" {
+  value = module.producer.name
+}
+
+output "producer_default_hostname" {
+  value = module.producer.default_hostname
+}
