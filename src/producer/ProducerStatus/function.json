@@ -1,0 +1,19 @@
+{
+  "scriptFile": "../function_app.py",
+  "entryPoint": "producer_status",
+  "bindings": [
+    {
+      "authLevel": "function",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "route": "status",
+      "methods": [ "get" ]
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "$return"
+    }
+  ]
+}
