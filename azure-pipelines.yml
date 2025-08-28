@@ -260,15 +260,15 @@ stages:
               $resourceGroupName = $outputs.resource_group_name.value
               Write-Host "Resource Group created: $resourceGroupName"
 
-            #  $outputs = terraform output -json | ConvertFrom-Json
-            #  $functionName = $outputs.producer_function_name.value
-            #  $functionUrl = $outputs.producer_function_url.value
+              $outputs = terraform output -json | ConvertFrom-Json
+              $functionName = $outputs.producer_function_name.value
+              $functionUrl = $outputs.producer_function_url.value
                   
-            #  Write-Host "Function Name: $functionName"
-            #  Write-Host "Function URL: $functionUrl"
+              Write-Host "Function Name: $functionName"
+              Write-Host "Function URL: $functionUrl"
                   
-            #  Write-Host "##vso[task.setvariable variable=functionName;isOutput=true]$functionName"
-            #  Write-Host "##vso[task.setvariable variable=functionUrl;isOutput=true]$functionUrl"
+              Write-Host "##vso[task.setvariable variable=functionName;isOutput=true]$functionName"
+              Write-Host "##vso[task.setvariable variable=functionUrl;isOutput=true]$functionUrl"
             workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
           name: 'setOutputs'
 
@@ -358,7 +358,9 @@ stages:
       - Application_Deploy
     condition: succeeded()
     variables:
-      functionUrl: $[ stageDependencies.Application_Deploy.Deploy_Producer.outputs['setOutputs.functionUrl'] ]
+      functionName: $[ stageDependencies.Infrastructure_Deploy.Deploy_Infrastructure.outputs['setOutputs.functionName'] ]
+      functionUrl: $[ stageDependencies.Infrastructure_Deploy.Deploy_Infrastructure.outputs['setOutputs.functionUrl'] ]
+
     jobs:
       - job: Run_Producer
         displayName: 'Trigger Producer Function'
