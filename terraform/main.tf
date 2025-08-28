@@ -7,3 +7,13 @@ module "resource_group" {
   environment         = var.environment
 }
 
+module "storage" {
+  source                  = "./modules/storage"
+  resource_group_name     = module.resource_group.name
+  location                = module.resource_group.location
+  environment             = var.environment
+  storage_account_prefix  = "storage"
+  queue_prefix            = "queue"
+  depends_on              = [module.resource_group]
+}
+
