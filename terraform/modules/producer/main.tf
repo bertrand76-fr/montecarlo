@@ -17,16 +17,3 @@ resource "azurerm_function_app" "main" {
     Module      = "producer"
   }
 }
-
-module "producer" {
-  source                      = "./modules/producer"
-  resource_group_name         = module.resource_group.name
-  location                    = module.resource_group.location
-  environment                 = var.environment
-  storage_account_name        = module.storage.storage_account_name
-  storage_account_access_key  = module.storage.storage_account_connection_string
-  app_service_plan_id         = module.app_service.id
-  function_name_prefix        = "producer"
-  runtime_version             = "3.11"
-  depends_on                  = [module.storage, module.app_service]
-}
