@@ -58,7 +58,7 @@ stages:
         - script: |
             cd src/producer
             pip install --upgrade pip
-            pip install -r requirements.txt
+            pip install -r requirements.txt --target .python_packages/lib/site-packages
             
             # Run tests if they exist
             if [ -f "tests/test_function.py" ]; then
@@ -350,3 +350,26 @@ stages:
                     $attempt++
                   }
               continueOnError: true
+
+  # STAGE 4: LANCE PRODUCER
+  - stage: Producer_Run
+    displayName: 'Lance Producer'
+    dependsOn:
+      - Application_Deploy
+    condition: succeeded()
+    variables:
+      functionUrl: $[ stageDependencies.Application_Deploy.Deploy_Producer.outputs['setOutputs.functionUrl'] ]
+    jobs:
+      - job: Run_Producer
+        displayName: 'Trigger Producer Function'
+        steps:
+          - task: PowerShell@2
+            displayName: 'Trigger Producer Function'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $functionUrl = "$(functionUrl)/api/producer"
+                Write-Host "Triggering Producer Function at: $functionUrl"
+                $response = Invoke-RestMethod -Uri $functionUrl -Method POST -TimeoutSec 300
+                Write-Host "Response: $($response | ConvertTo-Json -Compress)"
+
