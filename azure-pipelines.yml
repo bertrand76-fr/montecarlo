@@ -18,9 +18,13 @@ pr:
       - terraform/*
       - src/*
 
+# Manual trigger pour main branch (plus de contrôle)
+# trigger: none  # Décommentez pour désactiver auto-trigger complètement
+
 variables:
+  # - group: montecarlo-variables  # Variable group avec RG_MONTECARLO
   - name: RG_MONTECARLO
-    value: 'montecarlo'
+    value: 'montecarlo'    # Hardcodé pour test
   - name: terraformVersion
     value: '1.6.0'
   - name: pythonVersion
@@ -33,22 +37,29 @@ pool:
 
 stages:
 
-  # STAGE 1: CI BUILD
+
+  # STAGE 1: CI BUILD - Terraform Plan + App Build (Parallel)
   - stage: CI_Build
     displayName: 'Continuous Integration'
     jobs:
+      # Job 1: Build Applications (Parallel)
       - job: Build_Applications
         displayName: 'Build Producer Function'
+        
         steps:
         - checkout: self
+          displayName: 'Checkout Repository'
+        
         - task: UsePythonVersion@0
           displayName: 'Use Python $(pythonVersion)'
           inputs:
             versionSpec: '$(pythonVersion)'
+        
         - script: |
             cd src/producer
             pip install --upgrade pip
             pip install -r requirements.txt --target .python_packages/lib/site-packages
+            
             # Run tests if they exist
             if [ -f "tests/test_function.py" ]; then
               echo "Running tests..."
@@ -57,11 +68,14 @@ stages:
               echo "No tests found, skipping..."
             fi
           displayName: 'Install dependencies and run tests'
+        
         - task: PublishTestResults@2
           condition: succeededOrFailed()
           inputs:
             testResultsFiles: '**/test-results.xml'
             testRunTitle: 'Producer Function Tests'
+          displayName: 'Publish Test Results'
+        
         - task: ArchiveFiles@2
           displayName: 'Archive Producer Function'
           inputs:
@@ -69,6 +83,7 @@ stages:
             includeRootFolder: false
             archiveType: 'zip'
             archiveFile: '$(Build.ArtifactStagingDirectory)/producer-function.zip'
+        
         - task: PublishBuildArtifacts@1
           displayName: 'Publish Function Artifact'
           inputs:
@@ -79,15 +94,21 @@ stages:
   # STAGE 2: INFRASTRUCTURE DEPLOYMENT
   - stage: Infrastructure_Deploy
     displayName: 'Infrastructure Deployment'
+    
     jobs:
-      - job: Deploy_Infrastructure
-        displayName: 'Deploy Fresh Azure Infrastructure'
+      # Job 1: Terraform Plan et validation
+      - job: Infrastructure_Plan
+        displayName: 'Terraform Plan & Validation'
+        
         steps:
         - checkout: self
+          displayName: 'Checkout Repository'
+        
         - task: TerraformInstaller@0
           displayName: 'Install Terraform $(terraformVersion)'
           inputs:
             terraformVersion: $(terraformVersion)
+        
         - task: TerraformTaskV4@4
           displayName: 'Terraform Init'
           inputs:
@@ -99,99 +120,236 @@ stages:
             backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
             backendAzureRmContainerName: 'tfstate'
             backendAzureRmKey: 'montecarlo.terraform.tfstate'
+        
+        - task: TerraformTaskV4@4
+          displayName: 'Terraform Validate'
+          inputs:
+            provider: 'azurerm'
+            command: 'validate'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        
+        - task: TerraformTaskV4@4
+          displayName: 'Terraform Plan'
+          inputs:
+            provider: 'azurerm'
+            command: 'plan'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+            commandOptions: '-var="resource_group_name=$(RG_MONTECARLO)" -out=tfplan -detailed-exitcode'
+            environmentServiceNameAzureRM: 'montecarlo-service-connection'
+          name: 'terraformPlan'
+        
+        - task: PublishBuildArtifacts@1
+          displayName: 'Publish Terraform Plan'
+          inputs:
+            PathtoPublish: '$(System.DefaultWorkingDirectory)/terraform'
+            ArtifactName: 'terraform-plan'
+            publishLocation: 'Container'
+
+      # Job 2: Cleanup systématique
+      - job: Cleanup_Infrastructure
+        displayName: 'Cleanup Existing Infrastructure'
+        
+        steps:
+        - task: AzureCLI@2
+          displayName: 'Always Destroy Resource Group $(RG_MONTECARLO)'
+          inputs:
+            azureSubscription: 'montecarlo-service-connection'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              echo "🧹 Starting systematic cleanup of Resource Group: $(RG_MONTECARLO)"
+              
+              # Check if resource group exists
+              if az group exists --name $(RG_MONTECARLO) --output tsv | grep -q "true"; then
+                echo "✅ Resource Group $(RG_MONTECARLO) exists, proceeding with deletion..."
+                
+                # List resources before deletion (for logging)
+                echo "📋 Resources to be deleted:"
+                az resource list --resource-group $(RG_MONTECARLO) --output table || echo "No resources found"
+                
+                # Delete resource group and all its resources
+                echo "🗑️ Deleting Resource Group $(RG_MONTECARLO)..."
+                az group delete --name $(RG_MONTECARLO) --yes --no-wait
+                
+                # Wait for deletion to complete
+                echo "⏳ Waiting for deletion to complete..."
+                timeout=1200  # 20 minutes max
+                elapsed=0
+                while az group exists --name $(RG_MONTECARLO) --output tsv | grep -q "true"; do
+                  if [ $elapsed -ge $timeout ]; then
+                    echo "⚠️ Timeout waiting for deletion, continuing anyway..."
+                    break
+                  fi
+                  echo "Still deleting... waiting 30 seconds (elapsed: ${elapsed}s)"
+                  sleep 30
+                  elapsed=$((elapsed + 30))
+                done
+                
+                echo "✅ Resource Group cleanup completed!"
+              else
+                echo "ℹ️ Resource Group $(RG_MONTECARLO) does not exist, nothing to clean up."
+              fi
+              
+              echo "🚀 Ready for fresh infrastructure deployment!"
+
+      # Job 3: Deploy Infrastructure (toujours après cleanup)  
+      - job: Deploy_Infrastructure
+        displayName: 'Deploy Fresh Azure Infrastructure'
+        dependsOn: Cleanup_Infrastructure
+        condition: succeeded('Cleanup_Infrastructure')
+        
+        steps:
+        - download: current
+          artifact: terraform-plan
+          displayName: 'Download Terraform Plan'
+
+        - task: Bash@3
+          displayName: 'Fix Provider Permissions'
+          inputs:
+            targetType: 'inline'
+            script: |
+              echo "Fixing terraform provider permissions..."
+              find $(Pipeline.Workspace)/terraform-plan/.terraform -name "*terraform-provider*" -type f -exec chmod +x {} \; 2>/dev/null || true
+              ls -la $(Pipeline.Workspace)/terraform-plan/.terraform/providers/registry.terraform.io/hashicorp/azurerm/*/linux_amd64/ || echo "No providers found yet"
+            workingDirectory: $(Pipeline.Workspace)
+
+        - task: TerraformInstaller@0
+          displayName: 'Install Terraform $(terraformVersion)'
+          inputs:
+            terraformVersion: $(terraformVersion)
+        
+        - task: TerraformTaskV4@4
+          displayName: 'Terraform Init'
+          inputs:
+            provider: 'azurerm'
+            command: 'init'
+            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
+            commandOptions: '-reconfigure'
+            backendServiceArm: 'montecarlo-service-connection'
+            backendAzureRmResourceGroupName: 'rg-terraform-state'
+            backendAzureRmStorageAccountName: 'sttfstatemontecarlo2025'
+            backendAzureRmContainerName: 'tfstate'
+            backendAzureRmKey: 'montecarlo.terraform.tfstate'
+        
         - task: TerraformTaskV4@4
           displayName: 'Terraform Apply'
           inputs:
             provider: 'azurerm'
             command: 'apply'
-            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
+            commandOptions: 'tfplan'
             environmentServiceNameAzureRM: 'montecarlo-service-connection'
+        
         - task: TerraformTaskV4@4
           displayName: 'Terraform Output'
           inputs:
             provider: 'azurerm'
             command: 'output'
-            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'  
             commandOptions: '-json'
             environmentServiceNameAzureRM: 'montecarlo-service-connection'
           name: 'terraformOutputs'
+            
+            # Parse outputs et set variables
         - task: PowerShell@2
           displayName: 'Parse Terraform Outputs'
           inputs:
             targetType: 'inline'
             script: |
               $outputs = terraform output -json | ConvertFrom-Json
+              $resourceGroupName = $outputs.resource_group_name.value
+              Write-Host "Resource Group created: $resourceGroupName"
+
               $functionName = $outputs.producer_name.value
               $functionUrl = $outputs.producer_default_hostname.value
+                  
+              Write-Host "Contenu brut des outputs: $outputs"    
               Write-Host "Function Name: $functionName"
               Write-Host "Function URL: $functionUrl"
+                  
               Write-Host "##vso[task.setvariable variable=functionName;isOutput=true]$functionName"
-              Write-Host "##vso[task.setvariable variable=functionUrl;isOutput=true]https://$functionUrl"
-            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              Write-Host "##vso[task.setvariable variable=functionUrl;isOutput=true]$functionUrl"
+            workingDirectory: '$(Pipeline.Workspace)/terraform-plan'
           name: 'setOutputs'
+
 
   # STAGE 3: APPLICATION DEPLOYMENT
   - stage: Application_Deploy
     displayName: 'Application Deployment'
-    dependsOn:
+    dependsOn: 
       - Infrastructure_Deploy
       - CI_Build
     condition: succeeded()
+    
     variables:
       functionName: $[ stageDependencies.Infrastructure_Deploy.Deploy_Infrastructure.outputs['setOutputs.functionName'] ]
       functionUrl: $[ stageDependencies.Infrastructure_Deploy.Deploy_Infrastructure.outputs['setOutputs.functionUrl'] ]
+      
     jobs:
-      - deployment: Deploy_Producer
-        displayName: 'Deploy Producer Function'
-        environment: 'montecarlo-$(environment)'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-              - download: current
-                artifact: function-apps
-                displayName: 'Download Function Artifacts'
-              - task: AzureFunctionApp@1
-                displayName: 'Deploy Producer Function'
-                inputs:
-                  azureSubscription: 'montecarlo-service-connection'
-                  appType: 'functionAppLinux'
-                  appName: '$(functionName)'
-                  package: '$(Pipeline.Workspace)/function-apps/producer-function.zip'
-                  runtimeStack: 'PYTHON|3.11'
-                  deploymentMethod: 'zipDeploy'
-              - task: PowerShell@2
-                displayName: 'Test Function Deployment'
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    $baseUrl = "$(functionUrl)"
-                    if ($baseUrl -notlike "https://*") {
-                        $baseUrl = "https://$baseUrl"
+    - deployment: Deploy_Producer
+      displayName: 'Deploy Producer Function'
+      environment: 'montecarlo-$(environment)'
+      
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: function-apps
+              displayName: 'Download Function Artifacts'
+            
+            - task: AzureFunctionApp@1
+              displayName: 'Deploy Producer Function'
+              inputs:
+                azureSubscription: 'montecarlo-service-connection'
+                appType: 'functionAppLinux'
+                appName: '$(functionName)'
+                package: '$(Pipeline.Workspace)/function-apps/producer-function.zip'
+                runtimeStack: 'PYTHON|3.11'
+                deploymentMethod: 'zipDeploy'
+            
+            # Test deployment
+            - task: PowerShell@2
+              displayName: 'Test Function Deployment'
+              inputs:
+                targetType: 'inline'
+                script: |
+                  $functionUrl = "$(functionUrl)/api/health"
+                  Write-Host "Testing function at: $functionUrl"
+                  
+                  # Wait for function to be ready
+                  Start-Sleep -Seconds 30
+                  
+                  $maxAttempts = 5
+                  $attempt = 1
+                  
+                  while ($attempt -le $maxAttempts) {
+                    try {
+                      Write-Host "Health check attempt $attempt/$maxAttempts"
+                      $response = Invoke-RestMethod -Uri $functionUrl -Method Get -TimeoutSec 30
+                      Write-Host "✅ Function health check successful!"
+                      Write-Host "Response: $($response | ConvertTo-Json -Compress)"
+                      
+                      # Success summary
+                      Write-Host "##[section]🎉 Deployment Summary"
+                      Write-Host "##[command]Function Name: $(functionName)"
+                      Write-Host "##[command]Function URL: $(functionUrl)"
+                      Write-Host "##[command]Health Status: ✅ Healthy"
+                      
+                      exit 0
                     }
-                    $healthEndpoint = "$baseUrl/api/health"
-                    Write-Host "Testing HealthCheck Function at: $healthEndpoint"
-                    Start-Sleep -Seconds 30
-                    $maxAttempts = 5
-                    $attempt = 1
-                    while ($attempt -le $maxAttempts) {
-                        try {
-                            Write-Host "Health check attempt $attempt/$maxAttempts"
-                            $response = Invoke-RestMethod -Uri $healthEndpoint -Method Get -TimeoutSec 30
-                            Write-Host "✅ HealthCheck function is available!"
-                            Write-Host "Response: $($response | ConvertTo-Json -Compress)"
-                            exit 0
-                        }
-                        catch {
-                            Write-Warning "Health check attempt $attempt failed: $($_.Exception.Message)"
-                            if ($attempt -eq $maxAttempts) {
-                                Write-Error "❌ HealthCheck function failed after $maxAttempts attempts"
-                                exit 1
-                            }
-                            Start-Sleep -Seconds 10
-                        }
-                        $attempt++
+                    catch {
+                      Write-Warning "Health check attempt $attempt failed: $($_.Exception.Message)"
+                      if ($attempt -eq $maxAttempts) {
+                        Write-Error "❌ Function health check failed after $maxAttempts attempts"
+                        Write-Host "##[error]Deployment may have issues - manual verification needed"
+                        exit 1
+                      }
+                      Start-Sleep -Seconds 10
                     }
+                    $attempt++
+                  }
+              continueOnError: true
 
   # STAGE 4: LANCE PRODUCER
   - stage: Producer_Run
@@ -200,7 +358,9 @@ stages:
       - Application_Deploy
     condition: succeeded()
     variables:
+      functionName: $[ stageDependencies.Infrastructure_Deploy.Deploy_Infrastructure.outputs['setOutputs.functionName'] ]
       functionUrl: $[ stageDependencies.Infrastructure_Deploy.Deploy_Infrastructure.outputs['setOutputs.functionUrl'] ]
+
     jobs:
       - job: Run_Producer
         displayName: 'Trigger Producer Function'
@@ -218,4 +378,3 @@ stages:
                 Write-Host "Triggering Producer Function at: $functionEndpoint"
                 $response = Invoke-RestMethod -Uri $functionEndpoint -Method POST -TimeoutSec 300
                 Write-Host "Response: $($response | ConvertTo-Json -Compress)"
-
