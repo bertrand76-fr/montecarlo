@@ -12,6 +12,12 @@ resource "azurerm_function_app" "main" {
     linux_fx_version = "Python|${var.runtime_version}"
   }
 
+  app_settings = {
+    "FUNCTIONS_EXTENSION_VERSION" = "~4"
+    "WEBSITE_RUN_FROM_PACKAGE"    = "1"
+    # Ajoute ici tes autres settings si besoin
+  } 
+
   tags = {
     Environment = var.environment
     Module      = "producer"
