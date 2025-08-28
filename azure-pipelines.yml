@@ -260,9 +260,8 @@ stages:
               $resourceGroupName = $outputs.resource_group_name.value
               Write-Host "Resource Group created: $resourceGroupName"
 
-              $outputs = terraform output -json | ConvertFrom-Json
-              $functionName = $outputs.producer_function_name.value
-              $functionUrl = $outputs.producer_function_url.value
+              $functionName = $outputs.producer_name.value
+              $functionUrl = $outputs.producer_default_hostname.value
                   
               Write-Host "Function Name: $functionName"
               Write-Host "Function URL: $functionUrl"
