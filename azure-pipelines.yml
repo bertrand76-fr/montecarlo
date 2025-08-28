@@ -263,6 +263,7 @@ stages:
               $functionName = $outputs.producer_name.value
               $functionUrl = $outputs.producer_default_hostname.value
                   
+              Write-Host "Contenu brut des outputs: $outputs"    
               Write-Host "Function Name: $functionName"
               Write-Host "Function URL: $functionUrl"
                   
